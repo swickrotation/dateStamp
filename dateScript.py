@@ -94,7 +94,7 @@ for filename in os.listdir(input_dir):
 
         new_filename = f"{new_date} {new_name_part}{ext}"
     else:
-        # 👇 keep original name if no match
+        # keep original name if no match
         new_filename = filename
         unmatched.append(new_filename)
 
