@@ -9,7 +9,7 @@ DRY_RUN = False
 pattern = re.compile(
     r"(?P<day>\d{1,2})\s*(?P<month>"
     r"Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|"
-    r"janv|f[eé]v|mars|avr|mai|juin|juil|ao[uû]t?|sept|oct|nov|d[eé]c"
+    r"janv|f[eé]v|mars|avr|mai|juin|juil(let)?|ao[uû]t?|sept|oct|nov|d[eé]c"
     r")\s*(?P<year>\d{4})(?:\s*\((?P<hour>\d{2})h(?P<minute>\d{2})\))?",
     re.IGNORECASE,
 )
@@ -28,7 +28,7 @@ month_map = {
     "oct": "10",
     "nov": "11",
     "dec": "12",
-    # French (short + long + accents)
+    # French (short + long + accents. Not repeating where abbreviation is the same.)
     "janv": "01",
     "fev": "02",
     "fév": "02",
@@ -37,14 +37,12 @@ month_map = {
     "mai": "05",
     "juin": "06",
     "juil": "07",
+    "juillet": "07",
     "aou": "08",
     "aoû": "08",
     "aout": "08",
     "août": "08",
     "sept": "09",
-    "oct": "10",
-    "nov": "11",
-    "dec": "12",
     "déc": "12",
 }
 
@@ -71,7 +69,8 @@ for root, dirs, files in os.walk(input_dir):
         src_path = os.path.join(root, filename)
 
         name, ext = os.path.splitext(filename)
-        match = pattern.search(name)
+        matches = list(pattern.finditer(name))
+        match = matches[-1] if matches else None
 
         if match:
             day = match.group("day").zfill(2)
@@ -92,7 +91,8 @@ for root, dirs, files in os.walk(input_dir):
                     minute = match.group("minute")
                     new_date += f"T{hour}:{minute}"
 
-                new_name_part = pattern.sub("", name).strip("_- ")
+                start, end = match.span()
+                new_name_part = (name[:start] + name[end:]).strip("_- ")
 
                 if not new_name_part:
                     new_name_part = "file"
