@@ -4,18 +4,18 @@ import shutil
 import sys
 
 # --- CONFIG ---
-DRY_RUN = False  # Set to True to preview changes without copying
+DRY_RUN = False
 
 pattern = re.compile(
-    r"(?P<day>\d{1,2})(?P<month>"
+    r"(?P<day>\d{1,2})\s*(?P<month>"
     r"Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|"
-    r"janv|f[eé]v|mars|avr|mai|juin|juil|ao[uû]|sept|oct|nov|d[eé]c"
-    r")(?P<year>\d{4})(?:\s*\((?P<hour>\d{2})h(?P<minute>\d{2})\))?",
+    r"janv|f[eé]v|mars|avr|mai|juin|juil|ao[uû]t?|sept|oct|nov|d[eé]c"
+    r")\s*(?P<year>\d{4})(?:\s*\((?P<hour>\d{2})h(?P<minute>\d{2})\))?",
     re.IGNORECASE,
 )
 
 month_map = {
-    # If in English
+    # English
     "jan": "01",
     "feb": "02",
     "mar": "03",
@@ -28,7 +28,7 @@ month_map = {
     "oct": "10",
     "nov": "11",
     "dec": "12",
-    # If in French
+    # French (short + long + accents)
     "janv": "01",
     "fev": "02",
     "fév": "02",
@@ -39,6 +39,8 @@ month_map = {
     "juil": "07",
     "aou": "08",
     "aoû": "08",
+    "aout": "08",
+    "août": "08",
     "sept": "09",
     "oct": "10",
     "nov": "11",
@@ -46,71 +48,67 @@ month_map = {
     "déc": "12",
 }
 
+# --- INPUT ---
 if len(sys.argv) < 3:
     print("Usage: python dateScript.py <input_dir> <output_dir>")
     sys.exit(1)
 
-input_dir = sys.argv[1]
-output_dir = sys.argv[2]
-
-if not os.path.isdir(input_dir):
-    print(f"Error: '{input_dir}' is not a valid directory.")
-    sys.exit(1)
+input_dir = os.path.abspath(sys.argv[1])
+output_dir = os.path.abspath(sys.argv[2])
 
 os.makedirs(output_dir, exist_ok=True)
 
-unmatched = []
+# --- PROCESS RECURSIVELY ---
+for root, dirs, files in os.walk(input_dir):
 
-# --- PROCESS FILES ---
+    # Compute relative path (preserve structure)
+    rel_dir = os.path.relpath(root, input_dir)
+    target_dir = os.path.join(output_dir, rel_dir)
 
-for filename in os.listdir(input_dir):
-    filepath = os.path.join(input_dir, filename)
+    os.makedirs(target_dir, exist_ok=True)
 
-    if os.path.isdir(filepath):
-        continue
+    for filename in files:
+        src_path = os.path.join(root, filename)
 
-    name, ext = os.path.splitext(filename)
-    match = pattern.search(name)
+        name, ext = os.path.splitext(filename)
+        match = pattern.search(name)
 
-    if match:
-        day = match.group("day").zfill(2)
+        if match:
+            day = match.group("day").zfill(2)
 
-        month_str = match.group("month").lower()
-        month = month_map[month_str]
+            month_str = match.group("month").lower()
+            month = month_map.get(month_str)
 
-        year = match.group("year")
+            # If somehow unknown month slips through, fallback safely
+            if not month:
+                new_filename = filename
+            else:
+                year = match.group("year")
 
-        new_date = f"{year}{month}{day}"
+                new_date = f"{year}-{month}-{day}"
 
-        if match.group("hour"):
-            hour = match.group("hour")
-            minute = match.group("minute")
-            new_date += f"-{hour}-{minute}"
+                if match.group("hour"):
+                    hour = match.group("hour")
+                    minute = match.group("minute")
+                    new_date += f"T{hour}:{minute}"
 
-        new_name_part = pattern.sub("", name).strip("_- ")
+                new_name_part = pattern.sub("", name).strip("_- ")
 
-        if not new_name_part:
-            new_name_part = "file"
+                if not new_name_part:
+                    new_name_part = "file"
 
-        new_filename = f"{new_date} {new_name_part}{ext}"
-    else:
-        # keep original name if no match
-        new_filename = filename
-        unmatched.append(new_filename)
+                new_filename = f"{new_date} {new_name_part}{ext}"
+        else:
+            new_filename = filename
 
-    new_path = os.path.join(output_dir, new_filename)
+        dst_path = os.path.join(target_dir, new_filename)
 
-    if DRY_RUN:
-        print(f"[DRY RUN] {filename} → {new_filename}")
-    else:
-        if os.path.exists(new_path):
-            print(f"[SKIP] Already exists: {new_filename}")
-            continue
+        if DRY_RUN:
+            print(f"[DRY RUN] {src_path} → {dst_path}")
+        else:
+            if os.path.exists(dst_path):
+                print(f"[SKIP] Exists: {dst_path}")
+                continue
 
-        shutil.copy2(filepath, new_path)
-        print(f"Copied: {filename} → {new_filename}")
-
-# --- REPORT ---
-print("\nFiles without date string:")
-for f in unmatched:
-    print(f)
+            shutil.copy2(src_path, dst_path)
+            print(f"Copied: {src_path} → {dst_path}")
